@@ -1,25 +1,44 @@
 package com.adobe.phonegap.push;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import javax.management.Notification;
+import javax.naming.Context;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.w3c.dom.css.Rect;
+
+import com.google.firebase.messaging.FirebaseMessagingService;
+import com.google.firebase.messaging.RemoteMessage;
+
 import android.annotation.SuppressLint;
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ContentResolver;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
-import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Paint;
-import android.graphics.Canvas;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,30 +49,31 @@ import android.text.Html;
 import android.text.Spanned;
 import android.util.Log;
 
-import com.google.firebase.messaging.FirebaseMessagingService;
-import com.google.firebase.messaging.RemoteMessage;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.security.SecureRandom;
-
 @SuppressLint("NewApi")
 public class FCMService extends FirebaseMessagingService implements PushConstants {
 
   private static final String LOG_TAG = "Push_FCMService";
   private static HashMap<Integer, ArrayList<String>> messageMap = new HashMap<Integer, ArrayList<String>>();
 
+  private static final int FLAG_MUTABLE = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_MUTABLE
+      : 0;
+  private static final int FLAG_IMMUTABLE = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+      ? PendingIntent.FLAG_IMMUTABLE
+      : 0;
+
+  /**
+   * Called when a new token is generated, after app install or token changes.
+   *
+   * @param token
+   */
+  @Override
+    public void onNewToken(String token){
+    super.onNewToken(token);
+    Log.d(LOG_TAG, "Refreshed token: $token");
+
+    // TODO: Implement this method to send any registration to your app's servers.
+    //sendRegistrationToServer(token);
+  }
   public void setNotification(int notId, String message) {
     ArrayList<String> messageList = messageMap.get(notId);
     if (messageList == null) {
@@ -380,7 +400,7 @@ public class FCMService extends FirebaseMessagingService implements PushConstant
     SecureRandom random = new SecureRandom();
     int requestCode = random.nextInt();
     PendingIntent contentIntent = PendingIntent.getActivity(this, requestCode, notificationIntent,
-        PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent.FLAG_UPDATE_CURRENT | FLAG_IMMUTABLE);
 
     Intent dismissedNotificationIntent = new Intent(this, PushDismissedHandler.class);
     dismissedNotificationIntent.putExtra(PUSH_BUNDLE, extras);
@@ -390,7 +410,7 @@ public class FCMService extends FirebaseMessagingService implements PushConstant
 
     requestCode = random.nextInt();
     PendingIntent deleteIntent = PendingIntent.getBroadcast(this, requestCode, dismissedNotificationIntent,
-        PendingIntent.FLAG_CANCEL_CURRENT);
+        PendingIntent.FLAG_CANCEL_CURRENT | FLAG_IMMUTABLE);
 
     NotificationCompat.Builder mBuilder = null;
 
@@ -560,22 +580,22 @@ public class FCMService extends FirebaseMessagingService implements PushConstant
             if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.M) {
               Log.d(LOG_TAG, "push activity for notId " + notId);
               pIntent = PendingIntent.getActivity(this, uniquePendingIntentRequestCode, intent,
-                  PendingIntent.FLAG_ONE_SHOT);
+                  PendingIntent.FLAG_ONE_SHOT | FLAG_MUTABLE);
             } else {
               Log.d(LOG_TAG, "push receiver for notId " + notId);
               pIntent = PendingIntent.getBroadcast(this, uniquePendingIntentRequestCode, intent,
-                  PendingIntent.FLAG_ONE_SHOT);
+                  PendingIntent.FLAG_ONE_SHOT | FLAG_MUTABLE);
             }
           } else if (foreground) {
             intent = new Intent(this, PushHandlerActivity.class);
             updateIntent(intent, action.getString(CALLBACK), extras, foreground, notId);
             pIntent = PendingIntent.getActivity(this, uniquePendingIntentRequestCode, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent.FLAG_UPDATE_CURRENT | FLAG_IMMUTABLE);
           } else {
             intent = new Intent(this, BackgroundActionButtonHandler.class);
             updateIntent(intent, action.getString(CALLBACK), extras, foreground, notId);
             pIntent = PendingIntent.getBroadcast(this, uniquePendingIntentRequestCode, intent,
-                PendingIntent.FLAG_UPDATE_CURRENT);
+                PendingIntent.FLAG_UPDATE_CURRENT | FLAG_IMMUTABLE);
           }
 
           NotificationCompat.Action.Builder actionBuilder = new NotificationCompat.Action.Builder(

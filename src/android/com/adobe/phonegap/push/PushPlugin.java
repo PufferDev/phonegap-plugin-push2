@@ -1,23 +1,13 @@
 package com.adobe.phonegap.push;
 
-import android.annotation.TargetApi;
-import android.app.Activity;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.content.ContentResolver;
-import android.content.Context;
-import android.content.SharedPreferences;
-import android.content.res.Resources;
-import android.media.AudioAttributes;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationManagerCompat;
-import android.util.Log;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 
-import com.google.firebase.iid.FirebaseInstanceId;
-import com.google.firebase.messaging.FirebaseMessaging;
+import javax.naming.Context;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -28,13 +18,22 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.ArrayList;
-import java.util.List;
+import com.google.android.gms.tasks.Tasks;
+import com.google.firebase.messaging.FirebaseMessaging;
 
+import android.annotation.TargetApi;
+import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.ContentResolver;
+import android.content.SharedPreferences;
+import android.content.res.Resources;
+import android.media.AudioAttributes;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.v4.app.NotificationCompat;
+import android.util.Log;
 import me.leolin.shortcutbadger.ShortcutBadger;
 
 public class PushPlugin extends CordovaPlugin implements PushConstants {
@@ -183,7 +182,6 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
           Log.v(LOG_TAG, "execute: data=" + data.toString());
           SharedPreferences sharedPref = getApplicationContext().getSharedPreferences(COM_ADOBE_PHONEGAP_PUSH,
               Context.MODE_PRIVATE);
-          String token = null;
           String senderID = null;
 
           try {
@@ -198,8 +196,9 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
 
             Log.v(LOG_TAG, "execute: senderID=" + senderID);
 
+            String token;
             try {
-              token = FirebaseInstanceId.getInstance().getToken();
+              token = Tasks.await(FirebaseInstanceId.getInstance().getToken());
             } catch (IllegalStateException e) {
               Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.getMessage());
             }
@@ -290,7 +289,11 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
             if (topics != null && !"".equals(registration_id)) {
               unsubscribeFromTopics(topics, registration_id);
             } else {
-              FirebaseInstanceId.getInstance().deleteInstanceId();
+              try {
+                Tasks.await(FirebaseInstanceId.getInstance().deleteInstanceId());
+              } catch (ExecutionException e) {
+                throw e
+              }
               Log.v(LOG_TAG, "UNREGISTER");
 
               // Remove shared prefs
@@ -307,6 +310,9 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
             callbackContext.success();
           } catch (IOException e) {
             Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
+            callbackContext.error(e.getMessage());
+          } catch (InterruptedException e) {
+            Log.e(LOG_TAG, "execute: Interrupted Exception" + e.getMessage());
             callbackContext.error(e.getMessage());
           }
         }
