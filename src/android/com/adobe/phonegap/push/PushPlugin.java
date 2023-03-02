@@ -6,8 +6,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-
-import javax.naming.Context;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -26,6 +25,7 @@ import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.media.AudioAttributes;
@@ -34,6 +34,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
+
+import androidx.core.app.NotificationManagerCompat;
+
 import me.leolin.shortcutbadger.ShortcutBadger;
 
 public class PushPlugin extends CordovaPlugin implements PushConstants {
@@ -196,19 +199,11 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
 
             Log.v(LOG_TAG, "execute: senderID=" + senderID);
 
-            String token;
+            String token = null;
             try {
-              token = Tasks.await(FirebaseInstanceId.getInstance().getToken());
+              token = Tasks.await(FirebaseMessaging.getInstance().getToken());
             } catch (IllegalStateException e) {
               Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.getMessage());
-            }
-
-            if (token == null) {
-              try {
-                token = FirebaseInstanceId.getInstance().getToken(senderID, FCM);
-              } catch (IllegalStateException e) {
-                Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.getMessage());
-              }
             }
 
             if (!"".equals(token)) {
@@ -228,10 +223,7 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
           } catch (JSONException e) {
             Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
             callbackContext.error(e.getMessage());
-          } catch (IOException e) {
-            Log.e(LOG_TAG, "execute: Got IO Exception " + e.getMessage());
-            callbackContext.error(e.getMessage());
-          } catch (Resources.NotFoundException e) {
+          } catch (Resources.NotFoundException | ExecutionException | InterruptedException e) {
 
             Log.e(LOG_TAG, "execute: Got Resources NotFoundException " + e.getMessage());
             callbackContext.error(e.getMessage());
@@ -290,9 +282,9 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
               unsubscribeFromTopics(topics, registration_id);
             } else {
               try {
-                Tasks.await(FirebaseInstanceId.getInstance().deleteInstanceId());
+                Tasks.await(FirebaseMessaging.getInstance().deleteToken());
               } catch (ExecutionException e) {
-                throw e
+                throw e;
               }
               Log.v(LOG_TAG, "UNREGISTER");
 
@@ -308,7 +300,7 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
             }
 
             callbackContext.success();
-          } catch (IOException e) {
+          } catch (ExecutionException e) {
             Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
             callbackContext.error(e.getMessage());
           } catch (InterruptedException e) {
