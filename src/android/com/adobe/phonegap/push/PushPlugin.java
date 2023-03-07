@@ -1,5 +1,25 @@
 package com.adobe.phonegap.push;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+
+import org.apache.cordova.CallbackContext;
+import org.apache.cordova.CordovaInterface;
+import org.apache.cordova.CordovaPlugin;
+import org.apache.cordova.CordovaWebView;
+import org.apache.cordova.PluginResult;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import com.google.android.gms.tasks.Tasks;
+import com.google.firebase.messaging.FirebaseMessaging;
+
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.NotificationChannel;
@@ -13,27 +33,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationManagerCompat;
 import android.util.Log;
 
-import com.google.firebase.iid.FirebaseInstanceId;
-import com.google.firebase.messaging.FirebaseMessaging;
-
-import org.apache.cordova.CallbackContext;
-import org.apache.cordova.CordovaInterface;
-import org.apache.cordova.CordovaPlugin;
-import org.apache.cordova.CordovaWebView;
-import org.apache.cordova.PluginResult;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.IOException;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.ArrayList;
-import java.util.List;
+import androidx.core.app.NotificationManagerCompat;
 
 import me.leolin.shortcutbadger.ShortcutBadger;
 
@@ -183,7 +185,6 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
           Log.v(LOG_TAG, "execute: data=" + data.toString());
           SharedPreferences sharedPref = getApplicationContext().getSharedPreferences(COM_ADOBE_PHONEGAP_PUSH,
               Context.MODE_PRIVATE);
-          String token = null;
           String senderID = null;
 
           try {
@@ -198,18 +199,11 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
 
             Log.v(LOG_TAG, "execute: senderID=" + senderID);
 
+            String token = null;
             try {
-              token = FirebaseInstanceId.getInstance().getToken();
+              token = Tasks.await(FirebaseMessaging.getInstance().getToken());
             } catch (IllegalStateException e) {
               Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.getMessage());
-            }
-
-            if (token == null) {
-              try {
-                token = FirebaseInstanceId.getInstance().getToken(senderID, FCM);
-              } catch (IllegalStateException e) {
-                Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.getMessage());
-              }
             }
 
             if (!"".equals(token)) {
@@ -229,10 +223,7 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
           } catch (JSONException e) {
             Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
             callbackContext.error(e.getMessage());
-          } catch (IOException e) {
-            Log.e(LOG_TAG, "execute: Got IO Exception " + e.getMessage());
-            callbackContext.error(e.getMessage());
-          } catch (Resources.NotFoundException e) {
+          } catch (Resources.NotFoundException | ExecutionException | InterruptedException e) {
 
             Log.e(LOG_TAG, "execute: Got Resources NotFoundException " + e.getMessage());
             callbackContext.error(e.getMessage());
@@ -290,7 +281,11 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
             if (topics != null && !"".equals(registration_id)) {
               unsubscribeFromTopics(topics, registration_id);
             } else {
-              FirebaseInstanceId.getInstance().deleteInstanceId();
+              try {
+                Tasks.await(FirebaseMessaging.getInstance().deleteToken());
+              } catch (ExecutionException e) {
+                throw e;
+              }
               Log.v(LOG_TAG, "UNREGISTER");
 
               // Remove shared prefs
@@ -305,8 +300,11 @@ public class PushPlugin extends CordovaPlugin implements PushConstants {
             }
 
             callbackContext.success();
-          } catch (IOException e) {
+          } catch (ExecutionException e) {
             Log.e(LOG_TAG, "execute: Got JSON Exception " + e.getMessage());
+            callbackContext.error(e.getMessage());
+          } catch (InterruptedException e) {
+            Log.e(LOG_TAG, "execute: Interrupted Exception" + e.getMessage());
             callbackContext.error(e.getMessage());
           }
         }
